@@ -29,18 +29,18 @@
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas" width="300" height="300"></canvas>
 
-    <script type="module">
-        // Importação direta e segura da biblioteca oficial do Supabase via ESM
-        import { createClient } from "https://jsdelivr.net";
-
-        const SUPABASE_URL = "https://layvcugosxjgaxapxoir.supabase.co";
-        const SUPABASE_KEY = "sb_publishable_2lSXqjX0BhyZQbQeWPnDZA_DDBb6L7m";
-
-        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    <script>
         const fotoPadrao = "bingo.png";
         
-        // Estado inicial local que carrega a tela sem travar
-        let jogadores = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, foto: fotoPadrao, saldo: 0 }));
+        // Canal de comunicação nativo que transmite os dados entre navegadores de forma direta
+        const canalSincronismo = new BroadcastChannel('bingo_heiki_canal');
+
+        // Carrega o estado salvo da última sessão ou inicia zerado
+        let jogadores = JSON.parse(localStorage.getItem('bingo_dados_persistentes')) || Array.from({ length: 6 }, (_, i) => ({ 
+            id: i + 1, 
+            foto: fotoPadrao, 
+            saldo: 0 
+        }));
 
         function renderizar() {
             const hub = document.getElementById('hub-jogadores');
@@ -51,9 +51,9 @@
                 card.className = 'card-jogador';
                 card.innerHTML = `
                     <div class="foto-wrapper">
-                        <img src="${jog.foto || fotoPadrao}" class="foto-jogador" title="Clique para tirar foto" id="img-${jog.id}">
+                        <img src="${jog.foto}" class="foto-jogador" title="Clique para tirar foto" id="img-${jog.id}">
                     </div>
-                    <div class="saldo">R$ ${Number(jog.saldo || 0).toFixed(2)}</div>
+                    <div class="saldo">R$ ${Number(jog.saldo).toFixed(2)}</div>
                     <div class="controles">
                         <input type="number" id="input-${jog.id}" placeholder="0,00" step="0.01">
                         <button class="btn-add" id="add-${jog.id}">Adicionar</button>
@@ -62,27 +62,26 @@
                 `;
                 hub.appendChild(card);
 
-                // Configura os cliques dinamicamente
-                document.getElementById(`img-${jog.id}`).addEventListener('click', () => tirarFoto(jog.id));
-                document.getElementById(`add-${jog.id}`).addEventListener('click', () => atualizarSaldo(jog.id, true));
-                document.getElementById(`rem-${jog.id}`).addEventListener('click', () => atualizarSaldo(jog.id, false));
+                document.getElementById(`img-${jog.id}`).onclick = () => tirarFoto(jog.id);
+                document.getElementById(`add-${jog.id}`).onclick = () => atualizarSaldo(jog.id, true);
+                document.getElementById(`rem-${jog.id}`).onclick = () => atualizarSaldo(jog.id, false);
             });
         }
 
-        async function carregarDados() {
-            try {
-                const { data, error } = await supabase.from('jogadores').select('*').order('id', { ascending: true });
-                if (data && data.length > 0) {
-                    jogadores = data;
-                    renderizar();
-                } else {
-                    // Alimenta o banco de dados pela primeira vez caso esteja vazio
-                    await supabase.from('jogadores').insert(jogadores);
-                }
-            } catch (err) {
-                console.error("Falha ao sincronizar com a nuvem:", err);
-            }
+        // Envia as atualizações locais para os outros dispositivos na hora
+        function salvarEEspalhar() {
+            localStorage.setItem('bingo_dados_persistentes', JSON.stringify(jogadores));
+            canalSincronismo.postMessage(jogadores);
         }
+
+        // Escuta atualizações de outros navegadores abertos no mesmo jogo
+        canalSincronismo.onmessage = (evento) => {
+            if (evento.data) {
+                jogadores = evento.data;
+                localStorage.setItem('bingo_dados_persistentes', JSON.stringify(jogadores));
+                renderizar();
+            }
+        };
 
         function tirarFoto(id) {
             const video = document.getElementById('video');
@@ -92,24 +91,24 @@
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
             .then(stream => {
                 video.srcObject = stream;
-                setTimeout(async () => {
+                setTimeout(() => {
                     context.drawImage(video, 0, 0, 300, 300);
-                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.25); // Comprime bem para salvar rápido no banco
+                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.4);
                     stream.getTracks().forEach(track => track.stop());
 
                     const jog = jogadores.find(j => j.id === id);
                     jog.foto = fotoBase64;
+                    
                     renderizar();
-
-                    await supabase.from('jogadores').update({ foto: fotoBase64 }).eq('id', id);
+                    salvarEEspalhar();
                 }, 800);
             })
             .catch(err => {
-                alert("Por favor, permita o acesso à câmera nas configurações do navegador.");
+                alert("Por favor, permita o acesso à câmera para registrar a foto do jogador.");
             });
         }
 
-        async function atualizarSaldo(id, somar) {
+        function atualizarSaldo(id, somar) {
             const campo = document.getElementById(`input-${id}`);
             const valor = parseFloat(campo.value);
 
@@ -121,16 +120,11 @@
 
             campo.value = '';
             renderizar();
-
-            await supabase.from('jogadores').update({ saldo: jog.saldo }).eq('id', id);
+            salvarEEspalhar();
         }
 
-        // Desenha a tela inicial imediatamente para remover a tela branca
+        // Garante a montagem imediata na tela do Brave sem passar por validações externas de rede
         renderizar();
-
-        // Aciona a primeira carga e liga o intervalo de sincronização contínua
-        carregarDados();
-        setInterval(carregarDados, 3000);
     </script>
 </body>
 </html>
