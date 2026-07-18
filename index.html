@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bingo HeikiFM</title>
+    <title>BingoHeikiFM</title>
     <style>
         body { font-family: Arial, sans-serif; background: #f4f4f9; padding: 20px; max-width: 900px; margin: 0 auto; }
         h1 { text-align: center; color: #333; }
@@ -31,25 +31,21 @@
     <canvas id="canvas" width="300" height="300"></canvas>
 
     <script>
-        // Suas credenciais do Supabase configuradas com sucesso
         const SUPABASE_URL = "https://supabase.co";
         const SUPABASE_KEY = "sb_publishable_2lSXqjX0BhyZQbQeWPnDZA_DDBb6L7m";
 
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        const fotoPadrao = "bingo.png";
-        let jogadores = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, foto: fotoPadrao, saldo: 0 }));
-
-        async function carregarDados() {
-            const { data, error } = await supabase.from('jogadores').select('*').order('id', { ascending: true });
-            
-            if (data && data.length > 0) {
-                jogadores = data;
-            } else {
-                // Insere os 6 jogadores iniciais caso a tabela do banco esteja vazia
-                await supabase.from('jogadores').insert(jogadores);
-            }
-            renderizar();
+        // Inicialização segura do cliente Supabase
+        let supabase = null;
+        try {
+            supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        } catch(e) {
+            console.error("Erro ao conectar ao Supabase:", e);
         }
+
+        const fotoPadrao = "bingo.png";
+        
+        // Estado local garantido para carregar a página na hora com valores zerados
+        let jogadores = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, foto: fotoPadrao, saldo: 0 }));
 
         function renderizar() {
             const hub = document.getElementById('hub-jogadores');
@@ -60,9 +56,9 @@
                 card.className = 'card-jogador';
                 card.innerHTML = `
                     <div class="foto-wrapper">
-                        <img src="${jog.foto}" class="foto-jogador" title="Clique para tirar foto" id="img-${jog.id}">
+                        <img src="${jog.foto || fotoPadrao}" class="foto-jogador" title="Clique para tirar foto" id="img-${jog.id}">
                     </div>
-                    <div class="saldo">R$ ${Number(jog.saldo).toFixed(2)}</div>
+                    <div class="saldo">R$ ${Number(jog.saldo || 0).toFixed(2)}</div>
                     <div class="controles">
                         <input type="number" id="input-${jog.id}" placeholder="0,00" step="0.01">
                         <button class="btn-add" id="add-${jog.id}">Adicionar</button>
@@ -77,6 +73,24 @@
             });
         }
 
+        async function carregarDados() {
+            if (!supabase) return;
+            try {
+                const { data, error } = await supabase.from('jogadores').select('*').order('id', { ascending: true });
+                
+                if (data && data.length > 0) {
+                    // Atualiza o estado local mantendo as fotos e valores vindos da nuvem
+                    jogadores = data;
+                    renderizar();
+                } else {
+                    // Se o banco estiver totalmente vazio, registra os 6 jogadores padrões nele agora
+                    await supabase.from('jogadores').insert(jogadores);
+                }
+            } catch (err) {
+                console.error("Erro na sincronização:", err);
+            }
+        }
+
         function tirarFoto(id) {
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
@@ -87,14 +101,16 @@
                 video.srcObject = stream;
                 setTimeout(async () => {
                     context.drawImage(video, 0, 0, 300, 300);
-                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.3); // Otimização para armazenamento em texto
+                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.3);
                     stream.getTracks().forEach(track => track.stop());
 
                     const jog = jogadores.find(j => j.id === id);
                     jog.foto = fotoBase64;
-                    
                     renderizar();
-                    await supabase.from('jogadores').update({ foto: fotoBase64 }).eq('id', id);
+
+                    if (supabase) {
+                        await supabase.from('jogadores').update({ foto: fotoBase64 }).eq('id', id);
+                    }
                 }, 800);
             })
             .catch(err => {
@@ -109,17 +125,23 @@
             if (isNaN(valor) || valor <= 0) return;
 
             const jog = jogadores.find(j => j.id === id);
-            jog.saldo = somar ? jog.saldo + valor : jog.saldo - valor;
+            const saldoAtual = Number(jog.saldo || 0);
+            jog.saldo = somar ? saldoAtual + valor : saldoAtual - valor;
 
             campo.value = '';
             renderizar();
 
-            await supabase.from('jogadores').update({ saldo: jog.saldo }).eq('id', id);
+            if (supabase) {
+                await supabase.from('jogadores').update({ saldo: jog.saldo }).eq('id', id);
+            }
         }
 
-        // Sincroniza as informações a cada 3 segundos automaticamente
-        setInterval(carregarDados, 3000);
+        // Monta o layout inicial zerado imediatamente sem travar a tela
+        renderizar();
+
+        // Inicia as consultas automáticas na nuvem a cada 3 segundos
         carregarDados();
+        setInterval(carregarDados, 3000);
     </script>
 </body>
 </html>
