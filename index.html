@@ -4,17 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BingoHeikiFM</title>
-    <!-- Configuração do Favicon usando a sua imagem bingo.png -->
     <link rel="icon" type="image/png" href="bingo.png">
     <style>
         body { 
             font-family: Arial, sans-serif; 
-            padding: 10px; 
-            max-width: 850px; 
+            padding: 15px; 
+            max-width: 950px; 
             margin: 0 auto; 
             background-image: url('bingo.png');
             background-repeat: repeat;
-            background-size: 120px;
+            background-size: 130px;
             background-attachment: fixed;
             background-color: rgba(244, 244, 249, 0.85);
             background-blend-mode: overlay;
@@ -24,32 +23,33 @@
             color: #fff; 
             text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
             background: rgba(0, 0, 0, 0.6);
-            padding: 6px;
+            padding: 8px;
             border-radius: 8px;
-            font-size: 1.5em;
-            margin: 0 0 10px 0;
+            font-size: 1.6em;
+            margin: 0 0 15px 0;
         }
+        /* Força a estrutura fixa de 3 colunas */
         .grid-jogadores { 
             display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
-            gap: 12px; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 15px; 
             margin-top: 10px; 
         }
         .card-jogador { 
             background: rgba(255, 255, 255, 0.95); 
-            padding: 12px; 
-            border-radius: 10px; 
-            box-shadow: 0 3px 6px rgba(0,0,0,0.15); 
+            padding: 16px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15); 
             text-align: center; 
             position: relative;
         }
         .btn-reset {
             position: absolute;
-            top: 6px;
-            right: 6px;
+            top: 8px;
+            right: 8px;
             background: none;
             border: none;
-            font-size: 1em;
+            font-size: 1.1em;
             cursor: pointer;
             padding: 2px;
             opacity: 0.5;
@@ -57,14 +57,15 @@
         }
         .btn-reset:hover { opacity: 1; transform: scale(1.1); }
         
-        .foto-wrapper { position: relative; width: 90px; height: 90px; margin: 0 auto 10px auto; }
-        .foto-jogador { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; cursor: pointer; border: 2px solid #ccc; transition: transform 0.2s; }
+        /* Tamanho das fotos ajustado para preencher melhor o espaço */
+        .foto-wrapper { position: relative; width: 110px; height: 110px; margin: 0 auto 12px auto; }
+        .foto-jogador { width: 110px; height: 110px; border-radius: 50%; object-fit: cover; cursor: pointer; border: 2px solid #ccc; transition: transform 0.2s; }
         .foto-jogador:hover { transform: scale(1.05); border-color: #007bff; }
         
-        .saldo { font-size: 1.3em; font-weight: bold; margin-bottom: 10px; color: #333; }
-        .controles { display: flex; gap: 6px; justify-content: center; }
-        input[type="number"] { width: 85px; padding: 4px; border: 1px solid #ddd; border-radius: 5px; text-align: center; font-size: 0.9em; }
-        button.btn-add { padding: 4px 10px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; background-color: #2e7d32; font-size: 0.9em; }
+        .saldo { font-size: 1.5em; font-weight: bold; margin-bottom: 12px; color: #333; }
+        .controles { display: flex; gap: 8px; justify-content: center; }
+        input[type="number"] { width: 95px; padding: 5px; border: 1px solid #ddd; border-radius: 6px; text-align: center; font-size: 1em; }
+        button.btn-add { padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; background-color: #2e7d32; font-size: 1em; }
         video, canvas { display: none; }
     </style>
 </head>
