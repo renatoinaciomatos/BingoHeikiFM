@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BingoHeikiFM</title>
+    <title>Bingo HeikiFM</title>
     <style>
         body { font-family: Arial, sans-serif; background: #f4f4f9; padding: 20px; max-width: 900px; margin: 0 auto; }
         h1 { text-align: center; color: #333; }
@@ -20,10 +20,7 @@
         .btn-rem { background-color: #c62828; }
         video, canvas { display: none; }
     </style>
-
-    <!-- Bibliotecas globais do Firebase -->
-    <script src="https://gstatic.com"></script>
-    <script src="https://gstatic.com"></script>
+    <script src="https://jsdelivr.net"></script>
 </head>
 <body>
 
@@ -34,52 +31,38 @@
     <canvas id="canvas" width="300" height="300"></canvas>
 
     <script>
-        // Configuração leve para o banco de dados de valores
-        const firebaseConfig = {
-            databaseURL: "https://firebaseio.com"
-        };
+        // Suas credenciais do Supabase configuradas com sucesso
+        const SUPABASE_URL = "https://supabase.co";
+        const SUPABASE_KEY = "sb_publishable_2lSXqjX0BhyZQbQeWPnDZA_DDBb6L7m";
 
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
-        const dbRef = database.ref('bingo_valores');
-
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         const fotoPadrao = "bingo.png";
-        
-        // Estado local dos jogadores
-        let jogadores = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, saldo: 0 }));
+        let jogadores = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, foto: fotoPadrao, saldo: 0 }));
 
-        // Escuta os valores de dinheiro compartilhados na nuvem
-        dbRef.on('value', (snapshot) => {
-            const dadosSincronizados = snapshot.val();
-            if (dadosSincronizados) {
-                jogadores.forEach((jog, index) => {
-                    if (dadosSincronizados[index]) {
-                        jog.saldo = dadosSincronizados[index].saldo;
-                    }
-                });
+        async function carregarDados() {
+            const { data, error } = await supabase.from('jogadores').select('*').order('id', { ascending: true });
+            
+            if (data && data.length > 0) {
+                jogadores = data;
             } else {
-                // Envia dados zerados iniciais se a nuvem estiver limpa
-                dbRef.set(jogadores.map(j => ({ id: j.id, saldo: j.saldo })));
+                // Insere os 6 jogadores iniciais caso a tabela do banco esteja vazia
+                await supabase.from('jogadores').insert(jogadores);
             }
             renderizar();
-        });
+        }
 
         function renderizar() {
             const hub = document.getElementById('hub-jogadores');
             hub.innerHTML = '';
 
             jogadores.forEach(jog => {
-                // Recupera a foto salva no aparelho local ou usa a foto padrão do bingo
-                const fotoSalvaLocal = localStorage.getItem(`foto_jogador_${jog.id}`) || fotoPadrao;
-
                 const card = document.createElement('div');
                 card.className = 'card-jogador';
-                
                 card.innerHTML = `
                     <div class="foto-wrapper">
-                        <img src="${fotoSalvaLocal}" class="foto-jogador" title="Clique para tirar foto com a câmera" id="img-${jog.id}">
+                        <img src="${jog.foto}" class="foto-jogador" title="Clique para tirar foto" id="img-${jog.id}">
                     </div>
-                    <div class="saldo">R$ ${jog.saldo.toFixed(2)}</div>
+                    <div class="saldo">R$ ${Number(jog.saldo).toFixed(2)}</div>
                     <div class="controles">
                         <input type="number" id="input-${jog.id}" placeholder="0,00" step="0.01">
                         <button class="btn-add" id="add-${jog.id}">Adicionar</button>
@@ -102,25 +85,24 @@
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
             .then(stream => {
                 video.srcObject = stream;
-                
-                setTimeout(() => {
+                setTimeout(async () => {
                     context.drawImage(video, 0, 0, 300, 300);
-                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.5); // Comprime a foto de forma otimizada
-                    
+                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.3); // Otimização para armazenamento em texto
                     stream.getTracks().forEach(track => track.stop());
 
-                    // Salva a imagem com segurança no armazenamento do aparelho do usuário atual
-                    localStorage.setItem(`foto_jogador_${id}`, fotoBase64);
+                    const jog = jogadores.find(j => j.id === id);
+                    jog.foto = fotoBase64;
+                    
                     renderizar();
+                    await supabase.from('jogadores').update({ foto: fotoBase64 }).eq('id', id);
                 }, 800);
             })
             .catch(err => {
-                alert("Por favor, dê permissão de acesso à câmera no seu navegador.");
-                console.error(err);
+                alert("Permita o acesso à câmera para tirar a foto.");
             });
         }
 
-        function atualizarSaldo(id, somar) {
+        async function atualizarSaldo(id, somar) {
             const campo = document.getElementById(`input-${id}`);
             const valor = parseFloat(campo.value);
 
@@ -130,10 +112,14 @@
             jog.saldo = somar ? jog.saldo + valor : jog.saldo - valor;
 
             campo.value = '';
-            
-            // Sincroniza apenas a tabela leve de saldos com todos os jogadores conectados
-            dbRef.set(jogadores.map(j => ({ id: j.id, saldo: j.saldo })));
+            renderizar();
+
+            await supabase.from('jogadores').update({ saldo: jog.saldo }).eq('id', id);
         }
+
+        // Sincroniza as informações a cada 3 segundos automaticamente
+        setInterval(carregarDados, 3000);
+        carregarDados();
     </script>
 </body>
 </html>
