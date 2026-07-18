@@ -28,7 +28,6 @@
             font-size: 1.6em;
             margin: 0 0 15px 0;
         }
-        /* Força a estrutura fixa de 3 colunas */
         .grid-jogadores { 
             display: grid; 
             grid-template-columns: repeat(3, 1fr); 
@@ -57,8 +56,9 @@
         }
         .btn-reset:hover { opacity: 1; transform: scale(1.1); }
         
-        /* Tamanho das fotos ajustado para preencher melhor o espaço */
         .foto-wrapper { position: relative; width: 110px; height: 110px; margin: 0 auto 12px auto; }
+        
+        /* O object-fit: cover garante o corte perfeito e enquadramento circular */
         .foto-jogador { width: 110px; height: 110px; border-radius: 50%; object-fit: cover; cursor: pointer; border: 2px solid #ccc; transition: transform 0.2s; }
         .foto-jogador:hover { transform: scale(1.05); border-color: #007bff; }
         
@@ -66,7 +66,9 @@
         .controles { display: flex; gap: 8px; justify-content: center; }
         input[type="number"] { width: 95px; padding: 5px; border: 1px solid #ddd; border-radius: 6px; text-align: center; font-size: 1em; }
         button.btn-add { padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; background-color: #2e7d32; font-size: 1em; }
-        video, canvas { display: none; }
+        
+        /* Input invisível para acionar a galeria/câmera nativa */
+        input[type="file"] { display: none; }
     </style>
 </head>
 <body>
@@ -74,8 +76,8 @@
     <h1>BingoHeikiFM</h1>
     <div class="grid-jogadores" id="hub-jogadores"></div>
 
-    <video id="video" autoplay playsinline></video>
-    <canvas id="canvas" width="300" height="300"></canvas>
+    <!-- Input oculto global para gerenciamento de arquivos -->
+    <input type="file" id="upload-foto" accept="image/*">
 
     <script>
         const ID_PROJETO = "layvcugosxjgaxapxoir";
@@ -87,6 +89,8 @@
             return { id: i + 1, foto: FOTO_PADRAO, saldo: 0 };
         });
 
+        let jogadorSelecionadoParaFoto = null;
+
         function renderizar() {
             const hub = document.getElementById('hub-jogadores');
             hub.innerHTML = '';
@@ -97,7 +101,7 @@
                 card.innerHTML = `
                     <button class="btn-reset" id="reset-${jog.id}" title="Zerar jogador">🗑️</button>
                     <div class="foto-wrapper">
-                        <img src="${jog.foto || FOTO_PADRAO}" class="foto-jogador" title="Clique para tirar foto" id="img-${jog.id}">
+                        <img src="${jog.foto || FOTO_PADRAO}" class="foto-jogador" title="Alterar foto (Câmera ou Galeria)" id="img-${jog.id}">
                     </div>
                     <div class="saldo">R$ ${Number(jog.saldo || 0).toFixed(2)}</div>
                     <div class="controles">
@@ -107,7 +111,7 @@
                 `;
                 hub.appendChild(card);
 
-                document.getElementById(`img-${jog.id}`).onclick = function() { tirarFoto(jog.id); };
+                document.getElementById(`img-${jog.id}`).onclick = function() { acionarSelecaoFoto(jog.id); };
                 document.getElementById(`add-${jog.id}`).onclick = function() { atualizarSaldo(jog.id); };
                 document.getElementById(`reset-${jog.id}`).onclick = function() { zerarJogador(jog.id); };
             });
@@ -163,30 +167,47 @@
             }
         }
 
-        function tirarFoto(id) {
-            const video = document.getElementById('video');
-            const canvas = document.getElementById('canvas');
-            const context = canvas.getContext('2d');
+        function acionarSelecaoFoto(id) {
+            jogadorSelecionadoParaFoto = id;
+            // Abre as opções nativas do aparelho (Tirar Foto ou Escolher Arquivo)
+            document.getElementById('upload-foto').click();
+        }
 
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
-            .then(stream => {
-                video.srcObject = stream;
-                setTimeout(async () => {
-                    context.drawImage(video, 0, 0, 300, 300);
-                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.2);
-                    stream.getTracks().forEach(track => track.stop());
+        // Processa o arquivo selecionado ou a foto tirada
+        document.getElementById('upload-foto').onchange = function(evento) {
+            const arquivo = evento.target.files[0];
+            if (!arquivo || jogadorSelecionadoParaFoto === null) return;
 
-                    const jog = jogadores.find(j => j.id === id);
+            const leitor = new FileReader();
+            leitor.onload = function(e) {
+                const imgTemp = new Image();
+                imgTemp.onload = async function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Força o corte quadrado perfeito (300x300) independente da proporção original da foto
+                    canvas.width = 300;
+                    canvas.height = 300;
+                    
+                    const menorLado = Math.min(imgTemp.width, imgTemp.height);
+                    const sx = (imgTemp.width - menorLado) / 2;
+                    const sy = (imgTemp.height - menorLado) / 2;
+                    
+                    ctx.drawImage(imgTemp, sx, sy, menorLado, menorLado, 0, 0, 300, 300);
+                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.25);
+
+                    const jog = jogadores.find(j => j.id === jogadorSelecionadoParaFoto);
                     jog.foto = fotoBase64;
                     
                     renderizar();
-                    await enviarDadosNuvem(id);
-                }, 800);
-            })
-            .catch(err => {
-                alert("Por favor, habilite a permissão de câmera.");
-            });
-        }
+                    await enviarDadosNuvem(jogadorSelecionadoParaFoto);
+                    jogadorSelecionadoParaFoto = null;
+                };
+                imgTemp.src = e.target.result;
+            };
+            leitor.readAsDataURL(arquivo);
+            evento.target.value = ''; // Limpa o input para permitir novas seleções
+        };
 
         async function atualizarSaldo(id) {
             const campo = document.getElementById(`input-${id}`);
