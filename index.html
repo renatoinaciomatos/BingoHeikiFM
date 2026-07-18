@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bingo HeikiFM</title>
+    <title>BingoHeikiFM</title>
     <style>
         body { font-family: Arial, sans-serif; background: #f4f4f9; padding: 20px; max-width: 900px; margin: 0 auto; }
         h1 { text-align: center; color: #333; }
@@ -21,7 +21,7 @@
         video, canvas { display: none; }
     </style>
 
-    <!-- Scripts do Firebase carregados de forma global e compatível -->
+    <!-- Bibliotecas globais do Firebase -->
     <script src="https://gstatic.com"></script>
     <script src="https://gstatic.com"></script>
 </head>
@@ -34,28 +34,32 @@
     <canvas id="canvas" width="300" height="300"></canvas>
 
     <script>
-        // Configuração do banco público em tempo real
+        // Configuração leve para o banco de dados de valores
         const firebaseConfig = {
             databaseURL: "https://firebaseio.com"
         };
 
-        // Inicializa o Firebase
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
-        const dbRef = database.ref('bingo_dados');
+        const dbRef = database.ref('bingo_valores');
 
         const fotoPadrao = "bingo.png";
-        let jogadores = [];
+        
+        // Estado local dos jogadores
+        let jogadores = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, saldo: 0 }));
 
-        // Escuta o banco de dados e atualiza a tela de todo mundo instantaneamente
+        // Escuta os valores de dinheiro compartilhados na nuvem
         dbRef.on('value', (snapshot) => {
-            const dados = snapshot.val();
-            if (dados) {
-                jogadores = dados;
+            const dadosSincronizados = snapshot.val();
+            if (dadosSincronizados) {
+                jogadores.forEach((jog, index) => {
+                    if (dadosSincronizados[index]) {
+                        jog.saldo = dadosSincronizados[index].saldo;
+                    }
+                });
             } else {
-                // Estado inicial caso o banco seja resetado ou esteja vazio
-                jogadores = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, foto: fotoPadrao, saldo: 0 }));
-                dbRef.set(jogadores);
+                // Envia dados zerados iniciais se a nuvem estiver limpa
+                dbRef.set(jogadores.map(j => ({ id: j.id, saldo: j.saldo })));
             }
             renderizar();
         });
@@ -65,12 +69,15 @@
             hub.innerHTML = '';
 
             jogadores.forEach(jog => {
+                // Recupera a foto salva no aparelho local ou usa a foto padrão do bingo
+                const fotoSalvaLocal = localStorage.getItem(`foto_jogador_${jog.id}`) || fotoPadrao;
+
                 const card = document.createElement('div');
                 card.className = 'card-jogador';
                 
                 card.innerHTML = `
                     <div class="foto-wrapper">
-                        <img src="${jog.foto}" class="foto-jogador" title="Clique para tirar foto com a câmera" id="img-${jog.id}">
+                        <img src="${fotoSalvaLocal}" class="foto-jogador" title="Clique para tirar foto com a câmera" id="img-${jog.id}">
                     </div>
                     <div class="saldo">R$ ${jog.saldo.toFixed(2)}</div>
                     <div class="controles">
@@ -96,24 +103,19 @@
             .then(stream => {
                 video.srcObject = stream;
                 
-                // Aguarda estabilizar a câmera e tira a foto
                 setTimeout(() => {
                     context.drawImage(video, 0, 0, 300, 300);
-                    
-                    // Comprime a foto em qualidade média para economizar espaço e carregar instantaneamente
-                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.6);
+                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.5); // Comprime a foto de forma otimizada
                     
                     stream.getTracks().forEach(track => track.stop());
 
-                    const jog = jogadores.find(j => j.id === id);
-                    jog.foto = fotoBase64;
-                    
-                    // Envia para a nuvem de forma persistente
-                    dbRef.set(jogadores);
+                    // Salva a imagem com segurança no armazenamento do aparelho do usuário atual
+                    localStorage.setItem(`foto_jogador_${id}`, fotoBase64);
+                    renderizar();
                 }, 800);
             })
             .catch(err => {
-                alert("Permita o acesso à câmera para tirar a foto.");
+                alert("Por favor, dê permissão de acesso à câmera no seu navegador.");
                 console.error(err);
             });
         }
@@ -129,8 +131,8 @@
 
             campo.value = '';
             
-            // Envia o novo saldo para a nuvem de forma persistente
-            dbRef.set(jogadores);
+            // Sincroniza apenas a tabela leve de saldos com todos os jogadores conectados
+            dbRef.set(jogadores.map(j => ({ id: j.id, saldo: j.saldo })));
         }
     </script>
 </body>
