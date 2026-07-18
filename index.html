@@ -30,17 +30,16 @@
     <canvas id="canvas" width="300" height="300"></canvas>
 
     <script>
-        // Suas credenciais do Supabase integradas via requisições diretas de rede
-        const SUPABASE_URL = "https://supabase.co";
+        // Configuração direta corrigida e visível com seu Project ID
+        const ID_PROJETO = "layvcugosxjgaxapxoir";
+        const SUPABASE_URL = "https://" + ID_PROJETO + ".supabase.co";
         const SUPABASE_KEY = "sb_publishable_2lSXqjX0BhyZQbQeWPnDZA_DDBb6L7m";
         const FOTO_PADRAO = "bingo.png";
 
-        // Carrega imediatamente o cache local para não exibir tela branca
-        let jogadores = JSON.parse(localStorage.getItem('bingo_dados_persistentes')) || Array.from({ length: 6 }, (_, i) => ({ 
-            id: i + 1, 
-            foto: FOTO_PADRAO, 
-            saldo: 0 
-        }));
+        // Criação inicial dos 6 blocos locais sem erros de sintaxe
+        let jogadores = Array.from({ length: 6 }, function(_, i) {
+            return { id: i + 1, foto: FOTO_PADRAO, saldo: 0 };
+        });
 
         function renderizar() {
             const hub = document.getElementById('hub-jogadores');
@@ -62,52 +61,63 @@
                 `;
                 hub.appendChild(card);
 
-                document.getElementById(`img-${jog.id}`).onclick = () => tirarFoto(jog.id);
-                document.getElementById(`add-${jog.id}`).onclick = () => atualizarSaldo(jog.id, true);
-                document.getElementById(`rem-${jog.id}`).onclick = () => atualizarSaldo(jog.id, false);
+                document.getElementById(`img-${jog.id}`).onclick = function() { tirarFoto(jog.id); };
+                document.getElementById(`add-${jog.id}`).onclick = function() { atualizarSaldo(jog.id, true); };
+                document.getElementById(`rem-${jog.id}`).onclick = function() { atualizarSaldo(jog.id, false); };
             });
         }
 
-        // Busca os dados atualizados diretamente do seu banco Supabase sem usar scripts de fora
         async function carregarDadosNuvem() {
             try {
-                const resposta = await fetch(`${SUPABASE_URL}/rest/v1/jogadores?select=*&order=id.asc`, {
-                    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+                const resposta = await fetch(SUPABASE_URL + "/rest/v1/jogadores?select=*&order=id.asc", {
+                    headers: { 
+                        "apikey": SUPABASE_KEY, 
+                        "Authorization": "Bearer " + SUPABASE_KEY 
+                    }
                 });
                 const dados = await resposta.json();
                 
                 if (dados && dados.length > 0) {
                     jogadores = dados;
-                    localStorage.setItem('bingo_dados_persistentes', JSON.stringify(jogadores));
                     renderizar();
                 } else {
-                    // Inicializa a tabela caso ela esteja limpa
-                    await enviarDadosNuvem(jogadores, true);
+                    await inicializarTabelaNuvem();
                 }
             } catch (err) {
-                console.error("Erro ao puxar dados da nuvem:", err);
+                console.error("Erro ao carregar dados do Supabase:", err);
             }
         }
 
-        // Salva as alterações na nuvem de forma imediata
-        async function enviarDadosNuvem(idOuDados, ehCriacao Inicial = false) {
+        async function inicializarTabelaNuvem() {
             try {
-                if (ehCriacaoInicial) {
-                    await fetch(`${SUPABASE_URL}/rest/v1/jogadores`, {
-                        method: 'POST',
-                        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json" },
-                        body: JSON.stringify(idOuDados)
-                    });
-                } else {
-                    const jog = jogadores.find(j => j.id === idOuDados);
-                    await fetch(`${SUPABASE_URL}/rest/v1/jogadores?id=eq.${idOuDados}`, {
-                        method: 'PATCH',
-                        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json" },
-                        body: JSON.stringify({ foto: jog.foto, saldo: jog.saldo })
-                    });
-                }
+                await fetch(SUPABASE_URL + "/rest/v1/jogadores", {
+                    method: 'POST',
+                    headers: { 
+                        "apikey": SUPABASE_KEY, 
+                        "Authorization": "Bearer " + SUPABASE_KEY, 
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(jogadores)
+                });
             } catch (err) {
-                console.error("Erro ao enviar dados para a nuvem:", err);
+                console.error("Erro ao inicializar registros:", err);
+            }
+        }
+
+        async function enviarDadosNuvem(id) {
+            try {
+                const jog = jogadores.find(j => j.id === id);
+                await fetch(SUPABASE_URL + "/rest/v1/jogadores?id=eq." + id, {
+                    method: 'PATCH',
+                    headers: { 
+                        "apikey": SUPABASE_KEY, 
+                        "Authorization": "Bearer " + SUPABASE_KEY, 
+                        "Content-Type": "application/json" 
+                    },
+                    body: JSON.stringify({ foto: jog.foto, saldo: jog.saldo })
+                });
+            } catch (err) {
+                console.error("Erro ao atualizar registro na nuvem:", err);
             }
         }
 
@@ -121,14 +131,13 @@
                 video.srcObject = stream;
                 setTimeout(async () => {
                     context.drawImage(video, 0, 0, 300, 300);
-                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.2); // Compressão ideal para tráfego leve de rede
+                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.2);
                     stream.getTracks().forEach(track => track.stop());
 
                     const jog = jogadores.find(j => j.id === id);
                     jog.foto = fotoBase64;
                     
                     renderizar();
-                    localStorage.setItem('bingo_dados_persistentes', JSON.stringify(jogadores));
                     await enviarDadosNuvem(id);
                 }, 800);
             })
@@ -149,14 +158,13 @@
 
             campo.value = '';
             renderizar();
-            localStorage.setItem('bingo_dados_persistentes', JSON.stringify(jogadores));
             await enviarDadosNuvem(id);
         }
 
-        // Inicializa a tela com o cache do aparelho instantaneamente
+        // Renderiza as caixas vazias imediatamente
         renderizar();
 
-        // Faz o primeiro sincronismo e busca atualizações automaticamente a cada 3 segundos
+        // Puxa e sincroniza com o banco a cada 3 segundos
         carregarDadosNuvem();
         setInterval(carregarDadosNuvem, 3000);
     </script>
