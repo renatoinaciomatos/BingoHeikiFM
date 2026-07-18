@@ -14,10 +14,9 @@
         .foto-jogador:hover { transform: scale(1.05); border-color: #007bff; }
         .saldo { font-size: 1.6em; font-weight: bold; margin-bottom: 15px; color: #333; }
         .controles { display: flex; gap: 8px; justify-content: center; }
-        input[type="number"] { width: 90px; padding: 6px; border: 1px solid #ddd; border-radius: 6px; text-align: center; }
-        button { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; }
+        input[type="number"] { width: 110px; padding: 6px; border: 1px solid #ddd; border-radius: 6px; text-align: center; }
+        button { padding: 6px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; }
         .btn-add { background-color: #2e7d32; }
-        .btn-rem { background-color: #c62828; }
         video, canvas { display: none; }
     </style>
 </head>
@@ -30,13 +29,11 @@
     <canvas id="canvas" width="300" height="300"></canvas>
 
     <script>
-        // Configuração direta corrigida e visível com seu Project ID
         const ID_PROJETO = "layvcugosxjgaxapxoir";
         const SUPABASE_URL = "https://" + ID_PROJETO + ".supabase.co";
         const SUPABASE_KEY = "sb_publishable_2lSXqjX0BhyZQbQeWPnDZA_DDBb6L7m";
         const FOTO_PADRAO = "bingo.png";
 
-        // Criação inicial dos 6 blocos locais sem erros de sintaxe
         let jogadores = Array.from({ length: 6 }, function(_, i) {
             return { id: i + 1, foto: FOTO_PADRAO, saldo: 0 };
         });
@@ -54,16 +51,14 @@
                     </div>
                     <div class="saldo">R$ ${Number(jog.saldo || 0).toFixed(2)}</div>
                     <div class="controles">
-                        <input type="number" id="input-${jog.id}" placeholder="0,00" step="0.01">
+                        <input type="number" id="input-${jog.id}" placeholder="0" step="1">
                         <button class="btn-add" id="add-${jog.id}">Adicionar</button>
-                        <button class="btn-rem" id="rem-${jog.id}">-</button>
                     </div>
                 `;
                 hub.appendChild(card);
 
                 document.getElementById(`img-${jog.id}`).onclick = function() { tirarFoto(jog.id); };
-                document.getElementById(`add-${jog.id}`).onclick = function() { atualizarSaldo(jog.id, true); };
-                document.getElementById(`rem-${jog.id}`).onclick = function() { atualizarSaldo(jog.id, false); };
+                document.getElementById(`add-${jog.id}`).onclick = function() { atualizarSaldo(jog.id); };
             });
         }
 
@@ -146,27 +141,29 @@
             });
         }
 
-        async function atualizarSaldo(id, somar) {
+        async function atualizarSaldo(id) {
             const campo = document.getElementById(`input-${id}`);
             const valor = parseFloat(campo.value);
 
-            if (isNaN(valor) || valor <= 0) return;
+            // Permite valores negativos, apenas valida se é um número válido e diferente de zero
+            if (isNaN(valor) || valor === 0) return;
 
             const jog = jogadores.find(j => j.id === id);
             const saldoAtual = Number(jog.saldo || 0);
-            jog.saldo = somar ? saldoAtual + valor : saldoAtual - valor;
+            
+            // Soma o valor digitado (se for negativo, a soma fará a subtração automaticamente)
+            jog.saldo = saldoAtual + valor;
 
             campo.value = '';
             renderizar();
             await enviarDadosNuvem(id);
         }
 
-        // Renderiza as caixas vazias imediatamente
         renderizar();
-
-        // Puxa e sincroniza com o banco a cada 3 segundos
         carregarDadosNuvem();
-        setInterval(carregarDadosNuvem, 3000);
+
+        // Atualização ajustada para 10 segundos (10000 milissegundos)
+        setInterval(carregarDadosNuvem, 10000);
     </script>
 </body>
 </html>
