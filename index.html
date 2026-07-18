@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bingo HeikiFM</title>
+    <title>BingoHeikiFM</title>
     <style>
         body { font-family: Arial, sans-serif; background: #f4f4f9; padding: 20px; max-width: 900px; margin: 0 auto; }
         h1 { text-align: center; color: #333; }
@@ -20,7 +20,6 @@
         .btn-rem { background-color: #c62828; }
         video, canvas { display: none; }
     </style>
-    <script src="https://jsdelivr.net"></script>
 </head>
 <body>
 
@@ -30,18 +29,17 @@
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas" width="300" height="300"></canvas>
 
-    <script>
+    <script type="module">
+        // Importação direta e segura da biblioteca oficial do Supabase via ESM
+        import { createClient } from "https://jsdelivr.net";
+
         const SUPABASE_URL = "https://layvcugosxjgaxapxoir.supabase.co";
         const SUPABASE_KEY = "sb_publishable_2lSXqjX0BhyZQbQeWPnDZA_DDBb6L7m";
 
-        let supabase = null;
-        try {
-            supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        } catch(e) {
-            console.error("Erro ao conectar ao Supabase:", e);
-        }
-
+        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         const fotoPadrao = "bingo.png";
+        
+        // Estado inicial local que carrega a tela sem travar
         let jogadores = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, foto: fotoPadrao, saldo: 0 }));
 
         function renderizar() {
@@ -64,27 +62,25 @@
                 `;
                 hub.appendChild(card);
 
-                document.getElementById(`img-${jog.id}`).onclick = () => tirarFoto(jog.id);
-                document.getElementById(`add-${jog.id}`).onclick = () => atualizarSaldo(jog.id, true);
-                document.getElementById(`rem-${jog.id}`).onclick = () => atualizarSaldo(jog.id, false);
+                // Configura os cliques dinamicamente
+                document.getElementById(`img-${jog.id}`).addEventListener('click', () => tirarFoto(jog.id));
+                document.getElementById(`add-${jog.id}`).addEventListener('click', () => atualizarSaldo(jog.id, true));
+                document.getElementById(`rem-${jog.id}`).addEventListener('click', () => atualizarSaldo(jog.id, false));
             });
         }
 
         async function carregarDados() {
-            if (!supabase) return;
             try {
                 const { data, error } = await supabase.from('jogadores').select('*').order('id', { ascending: true });
-                
                 if (data && data.length > 0) {
-                    // Sincroniza a tela com o que está salvo na nuvem
                     jogadores = data;
                     renderizar();
                 } else {
-                    // SE O BANCO ESTIVER VAZIO: Força o salvamento dos 6 jogadores iniciais para criar os registros de vez
+                    // Alimenta o banco de dados pela primeira vez caso esteja vazio
                     await supabase.from('jogadores').insert(jogadores);
                 }
             } catch (err) {
-                console.error("Erro na sincronização:", err);
+                console.error("Falha ao sincronizar com a nuvem:", err);
             }
         }
 
@@ -98,20 +94,18 @@
                 video.srcObject = stream;
                 setTimeout(async () => {
                     context.drawImage(video, 0, 0, 300, 300);
-                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.3);
+                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.25); // Comprime bem para salvar rápido no banco
                     stream.getTracks().forEach(track => track.stop());
 
                     const jog = jogadores.find(j => j.id === id);
                     jog.foto = fotoBase64;
                     renderizar();
 
-                    if (supabase) {
-                        await supabase.from('jogadores').update({ foto: fotoBase64 }).eq('id', id);
-                    }
+                    await supabase.from('jogadores').update({ foto: fotoBase64 }).eq('id', id);
                 }, 800);
             })
             .catch(err => {
-                alert("Permita o acesso à câmera para tirar a foto.");
+                alert("Por favor, permita o acesso à câmera nas configurações do navegador.");
             });
         }
 
@@ -128,17 +122,15 @@
             campo.value = '';
             renderizar();
 
-            if (supabase) {
-                await supabase.from('jogadores').update({ saldo: jog.saldo }).eq('id', id);
-            }
+            await supabase.from('jogadores').update({ saldo: jog.saldo }).eq('id', id);
         }
 
-        // Carrega o layout limpo e aciona a criação inicial no banco
+        // Desenha a tela inicial imediatamente para remover a tela branca
         renderizar();
-        carregarDados();
 
-        // Mantém a sincronização viva a cada 4 segundos
-        setInterval(carregarDados, 4000);
+        // Aciona a primeira carga e liga o intervalo de sincronização contínua
+        carregarDados();
+        setInterval(carregarDados, 3000);
     </script>
 </body>
 </html>
