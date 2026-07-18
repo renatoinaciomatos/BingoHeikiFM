@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BingoHeikiFM</title>
+    <title>Bingo HeikiFM</title>
     <style>
         body { font-family: Arial, sans-serif; background: #f4f4f9; padding: 20px; max-width: 900px; margin: 0 auto; }
         h1 { text-align: center; color: #333; }
@@ -31,10 +31,9 @@
     <canvas id="canvas" width="300" height="300"></canvas>
 
     <script>
-        const SUPABASE_URL = "https://supabase.co";
+        const SUPABASE_URL = "https://layvcugosxjgaxapxoir.supabase.co";
         const SUPABASE_KEY = "sb_publishable_2lSXqjX0BhyZQbQeWPnDZA_DDBb6L7m";
 
-        // Inicialização segura do cliente Supabase
         let supabase = null;
         try {
             supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -43,8 +42,6 @@
         }
 
         const fotoPadrao = "bingo.png";
-        
-        // Estado local garantido para carregar a página na hora com valores zerados
         let jogadores = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, foto: fotoPadrao, saldo: 0 }));
 
         function renderizar() {
@@ -79,11 +76,11 @@
                 const { data, error } = await supabase.from('jogadores').select('*').order('id', { ascending: true });
                 
                 if (data && data.length > 0) {
-                    // Atualiza o estado local mantendo as fotos e valores vindos da nuvem
+                    // Sincroniza a tela com o que está salvo na nuvem
                     jogadores = data;
                     renderizar();
                 } else {
-                    // Se o banco estiver totalmente vazio, registra os 6 jogadores padrões nele agora
+                    // SE O BANCO ESTIVER VAZIO: Força o salvamento dos 6 jogadores iniciais para criar os registros de vez
                     await supabase.from('jogadores').insert(jogadores);
                 }
             } catch (err) {
@@ -136,12 +133,12 @@
             }
         }
 
-        // Monta o layout inicial zerado imediatamente sem travar a tela
+        // Carrega o layout limpo e aciona a criação inicial no banco
         renderizar();
-
-        // Inicia as consultas automáticas na nuvem a cada 3 segundos
         carregarDados();
-        setInterval(carregarDados, 3000);
+
+        // Mantém a sincronização viva a cada 4 segundos
+        setInterval(carregarDados, 4000);
     </script>
 </body>
 </html>
