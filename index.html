@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BingoHeikiFM</title>
+    <title>Bingo HeikiFM</title>
     <style>
         body { font-family: Arial, sans-serif; background: #f4f4f9; padding: 20px; max-width: 900px; margin: 0 auto; }
         h1 { text-align: center; color: #333; }
@@ -18,25 +18,47 @@
         button { padding: 6px 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; color: white; }
         .btn-add { background-color: #2e7d32; }
         .btn-rem { background-color: #c62828; }
-        /* Elementos ocultos para controle da câmera */
         video, canvas { display: none; }
     </style>
+
+    <!-- Scripts do Firebase carregados de forma global e compatível -->
+    <script src="https://gstatic.com"></script>
+    <script src="https://gstatic.com"></script>
 </head>
 <body>
 
     <h1>BingoHeikiFM</h1>
     <div class="grid-jogadores" id="hub-jogadores"></div>
 
-    <!-- Elementos ocultos compartilhados para capturar a foto -->
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas" width="300" height="300"></canvas>
 
     <script>
-        // Puxa a imagem bingo.png que já está na raiz do seu repositório GitHub
-        const fotoPadrao = "bingo.png";
+        // Configuração do banco público em tempo real
+        const firebaseConfig = {
+            databaseURL: "https://firebaseio.com"
+        };
 
-        // Inicializa os 6 jogadores localmente para carregar a tela de imediato
-        let jogadores = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, foto: fotoPadrao, saldo: 0 }));
+        // Inicializa o Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        const dbRef = database.ref('bingo_dados');
+
+        const fotoPadrao = "bingo.png";
+        let jogadores = [];
+
+        // Escuta o banco de dados e atualiza a tela de todo mundo instantaneamente
+        dbRef.on('value', (snapshot) => {
+            const dados = snapshot.val();
+            if (dados) {
+                jogadores = dados;
+            } else {
+                // Estado inicial caso o banco seja resetado ou esteja vazio
+                jogadores = Array.from({ length: 6 }, (_, i) => ({ id: i + 1, foto: fotoPadrao, saldo: 0 }));
+                dbRef.set(jogadores);
+            }
+            renderizar();
+        });
 
         function renderizar() {
             const hub = document.getElementById('hub-jogadores');
@@ -59,14 +81,12 @@
                 `;
                 hub.appendChild(card);
 
-                // Vincula os cliques de forma segura
                 document.getElementById(`img-${jog.id}`).onclick = () => tirarFoto(jog.id);
                 document.getElementById(`add-${jog.id}`).onclick = () => atualizarSaldo(jog.id, true);
                 document.getElementById(`rem-${jog.id}`).onclick = () => atualizarSaldo(jog.id, false);
             });
         }
 
-        // Função que ativa a câmera do celular/computador e substitui a imagem do jogador escolhido
         function tirarFoto(id) {
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
@@ -75,25 +95,25 @@
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
             .then(stream => {
                 video.srcObject = stream;
-                video.style.display = 'block'; // Mostra temporariamente o visor caso queira, ou captura direto
-
-                // Aguarda 1 segundo para a câmera focar e captura a imagem automaticamente
+                
+                // Aguarda estabilizar a câmera e tira a foto
                 setTimeout(() => {
                     context.drawImage(video, 0, 0, 300, 300);
-                    const fotoBase64 = canvas.toDataURL('image/jpeg');
                     
-                    // Desliga a câmera
+                    // Comprime a foto em qualidade média para economizar espaço e carregar instantaneamente
+                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.6);
+                    
                     stream.getTracks().forEach(track => track.stop());
-                    video.style.display = 'none';
 
-                    // Atualiza a foto do jogador correspondente
                     const jog = jogadores.find(j => j.id === id);
                     jog.foto = fotoBase64;
-                    renderizar();
-                }, 1000);
+                    
+                    // Envia para a nuvem de forma persistente
+                    dbRef.set(jogadores);
+                }, 800);
             })
             .catch(err => {
-                alert("Não foi possível acessar a câmera. Certifique-se de dar permissão ao navegador.");
+                alert("Permita o acesso à câmera para tirar a foto.");
                 console.error(err);
             });
         }
@@ -108,11 +128,10 @@
             jog.saldo = somar ? jog.saldo + valor : jog.saldo - valor;
 
             campo.value = '';
-            renderizar();
+            
+            // Envia o novo saldo para a nuvem de forma persistente
+            dbRef.set(jogadores);
         }
-
-        // Executa a montagem inicial da tela sem depender de conexões externas travadas
-        renderizar();
     </script>
 </body>
 </html>
