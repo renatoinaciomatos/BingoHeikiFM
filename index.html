@@ -30,15 +30,15 @@
     <canvas id="canvas" width="300" height="300"></canvas>
 
     <script>
-        const fotoPadrao = "bingo.png";
-        
-        // Canal de comunicação nativo que transmite os dados entre navegadores de forma direta
-        const canalSincronismo = new BroadcastChannel('bingo_heiki_canal');
+        // Suas credenciais do Supabase integradas via requisições diretas de rede
+        const SUPABASE_URL = "https://supabase.co";
+        const SUPABASE_KEY = "sb_publishable_2lSXqjX0BhyZQbQeWPnDZA_DDBb6L7m";
+        const FOTO_PADRAO = "bingo.png";
 
-        // Carrega o estado salvo da última sessão ou inicia zerado
+        // Carrega imediatamente o cache local para não exibir tela branca
         let jogadores = JSON.parse(localStorage.getItem('bingo_dados_persistentes')) || Array.from({ length: 6 }, (_, i) => ({ 
             id: i + 1, 
-            foto: fotoPadrao, 
+            foto: FOTO_PADRAO, 
             saldo: 0 
         }));
 
@@ -51,9 +51,9 @@
                 card.className = 'card-jogador';
                 card.innerHTML = `
                     <div class="foto-wrapper">
-                        <img src="${jog.foto}" class="foto-jogador" title="Clique para tirar foto" id="img-${jog.id}">
+                        <img src="${jog.foto || FOTO_PADRAO}" class="foto-jogador" title="Clique para tirar foto" id="img-${jog.id}">
                     </div>
-                    <div class="saldo">R$ ${Number(jog.saldo).toFixed(2)}</div>
+                    <div class="saldo">R$ ${Number(jog.saldo || 0).toFixed(2)}</div>
                     <div class="controles">
                         <input type="number" id="input-${jog.id}" placeholder="0,00" step="0.01">
                         <button class="btn-add" id="add-${jog.id}">Adicionar</button>
@@ -68,20 +68,48 @@
             });
         }
 
-        // Envia as atualizações locais para os outros dispositivos na hora
-        function salvarEEspalhar() {
-            localStorage.setItem('bingo_dados_persistentes', JSON.stringify(jogadores));
-            canalSincronismo.postMessage(jogadores);
+        // Busca os dados atualizados diretamente do seu banco Supabase sem usar scripts de fora
+        async function carregarDadosNuvem() {
+            try {
+                const resposta = await fetch(`${SUPABASE_URL}/rest/v1/jogadores?select=*&order=id.asc`, {
+                    headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+                });
+                const dados = await resposta.json();
+                
+                if (dados && dados.length > 0) {
+                    jogadores = dados;
+                    localStorage.setItem('bingo_dados_persistentes', JSON.stringify(jogadores));
+                    renderizar();
+                } else {
+                    // Inicializa a tabela caso ela esteja limpa
+                    await enviarDadosNuvem(jogadores, true);
+                }
+            } catch (err) {
+                console.error("Erro ao puxar dados da nuvem:", err);
+            }
         }
 
-        // Escuta atualizações de outros navegadores abertos no mesmo jogo
-        canalSincronismo.onmessage = (evento) => {
-            if (evento.data) {
-                jogadores = evento.data;
-                localStorage.setItem('bingo_dados_persistentes', JSON.stringify(jogadores));
-                renderizar();
+        // Salva as alterações na nuvem de forma imediata
+        async function enviarDadosNuvem(idOuDados, ehCriacao Inicial = false) {
+            try {
+                if (ehCriacaoInicial) {
+                    await fetch(`${SUPABASE_URL}/rest/v1/jogadores`, {
+                        method: 'POST',
+                        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json" },
+                        body: JSON.stringify(idOuDados)
+                    });
+                } else {
+                    const jog = jogadores.find(j => j.id === idOuDados);
+                    await fetch(`${SUPABASE_URL}/rest/v1/jogadores?id=eq.${idOuDados}`, {
+                        method: 'PATCH',
+                        headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}`, "Content-Type": "application/json" },
+                        body: JSON.stringify({ foto: jog.foto, saldo: jog.saldo })
+                    });
+                }
+            } catch (err) {
+                console.error("Erro ao enviar dados para a nuvem:", err);
             }
-        };
+        }
 
         function tirarFoto(id) {
             const video = document.getElementById('video');
@@ -91,24 +119,25 @@
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false })
             .then(stream => {
                 video.srcObject = stream;
-                setTimeout(() => {
+                setTimeout(async () => {
                     context.drawImage(video, 0, 0, 300, 300);
-                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.4);
+                    const fotoBase64 = canvas.toDataURL('image/jpeg', 0.2); // Compressão ideal para tráfego leve de rede
                     stream.getTracks().forEach(track => track.stop());
 
                     const jog = jogadores.find(j => j.id === id);
                     jog.foto = fotoBase64;
                     
                     renderizar();
-                    salvarEEspalhar();
+                    localStorage.setItem('bingo_dados_persistentes', JSON.stringify(jogadores));
+                    await enviarDadosNuvem(id);
                 }, 800);
             })
             .catch(err => {
-                alert("Por favor, permita o acesso à câmera para registrar a foto do jogador.");
+                alert("Por favor, habilite a permissão de câmera.");
             });
         }
 
-        function atualizarSaldo(id, somar) {
+        async function atualizarSaldo(id, somar) {
             const campo = document.getElementById(`input-${id}`);
             const valor = parseFloat(campo.value);
 
@@ -120,11 +149,16 @@
 
             campo.value = '';
             renderizar();
-            salvarEEspalhar();
+            localStorage.setItem('bingo_dados_persistentes', JSON.stringify(jogadores));
+            await enviarDadosNuvem(id);
         }
 
-        // Garante a montagem imediata na tela do Brave sem passar por validações externas de rede
+        // Inicializa a tela com o cache do aparelho instantaneamente
         renderizar();
+
+        // Faz o primeiro sincronismo e busca atualizações automaticamente a cada 3 segundos
+        carregarDadosNuvem();
+        setInterval(carregarDadosNuvem, 3000);
     </script>
 </body>
 </html>
